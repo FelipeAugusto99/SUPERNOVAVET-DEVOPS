@@ -1,9 +1,10 @@
 package Novamonitor.controller;
 
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.*;
 import Novamonitor.entity.Tutor;
 import Novamonitor.repository.TutorRepository;
+import jakarta.validation.Valid;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
@@ -20,7 +21,7 @@ public class TutorController {
     }
 
     @PostMapping
-    public Tutor cadastrar(@RequestBody Tutor tutor) {
+    public Tutor cadastrar(@Valid @RequestBody Tutor tutor) {
         return repository.save(tutor);
     }
 }
