@@ -1,5 +1,5 @@
 ALTER TABLE ch_tutor
-    ADD (
-    ds_senha VARCHAR2(255),
-    ds_perfil VARCHAR2(30)
-);
+    ADD COLUMN ds_senha VARCHAR(255);
+
+ALTER TABLE ch_tutor
+    ADD COLUMN ds_perfil VARCHAR(30);
