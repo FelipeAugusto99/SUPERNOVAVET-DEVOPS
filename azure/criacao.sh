@@ -1,165 +1,165 @@
-GRUPO=SupernovaVet
-LOCATION=brazilsouth
-USER=azureuser
-PASSWORD='Supernova@2026'
+#!/bin/bash
 
-RG=rg-$GRUPO
-VNET=vnet-$GRUPO
-SUBNET=subnet-$GRUPO
-NSG=nsg-$GRUPO
-VM=vm-$GRUPO
+# ============================================================
+# SUPERNOVA VET - CRIACAO DA INFRAESTRUTURA AZURE
+# Arquitetura: ACR + ACI
+# ============================================================
 
-# 1. Criar Resource Group
+RESOURCE_GROUP="rg-supernovavet-devops"
+LOCATION="brazilsouth"
+
+ACR_NAME="acrsupernovavet563982"
+ACR_SERVER="$ACR_NAME.azurecr.io"
+
+DB_CONTAINER="aci-supernovavet-db"
+DB_DNS="supernovavet-db-563982"
+
+API_CONTAINER="aci-supernovavet-api"
+API_DNS="supernovavet-api-563982"
+
+IMAGE_NAME="supernovavet-api"
+IMAGE_TAG="v1"
+
+echo "=========================================="
+echo "SUPERNOVA VET - CRIACAO DA INFRAESTRUTURA"
+echo "=========================================="
+
+echo ""
+echo "Digite a senha do PostgreSQL:"
+read -s DB_PASSWORD
+
+echo ""
+echo "Criando Resource Group..."
+
 az group create \
-  --name $RG \
+  --name $RESOURCE_GROUP \
+  --location $LOCATION
+
+echo ""
+echo "Registrando provider Microsoft.ContainerInstance..."
+
+az provider register \
+  --namespace Microsoft.ContainerInstance
+
+echo ""
+echo "Criando Azure Container Registry..."
+
+az acr create \
+  --resource-group $RESOURCE_GROUP \
+  --name $ACR_NAME \
+  --sku Basic \
+  --location $LOCATION
+
+echo ""
+echo "Realizando login no ACR..."
+
+az acr login \
+  --name $ACR_NAME
+
+echo ""
+echo "Gerando imagem Docker da API..."
+
+docker build \
+  -t $IMAGE_NAME .
+
+echo ""
+echo "Criando tag da imagem..."
+
+docker tag \
+  "$IMAGE_NAME:latest" \
+  "$ACR_SERVER/$IMAGE_NAME:$IMAGE_TAG"
+
+echo ""
+echo "Enviando imagem para o ACR..."
+
+docker push \
+  "$ACR_SERVER/$IMAGE_NAME:$IMAGE_TAG"
+
+echo ""
+echo "Criando PostgreSQL no Azure Container Instances..."
+
+az container create \
+  --resource-group $RESOURCE_GROUP \
+  --name $DB_CONTAINER \
+  --image postgres:16 \
   --location $LOCATION \
-  --tags owner=$GRUPO environment=dev cost-center=fiap
+  --os-type Linux \
+  --cpu 1 \
+  --memory 1.5 \
+  --ports 5432 \
+  --ip-address Public \
+  --dns-name-label $DB_DNS \
+  --environment-variables \
+    POSTGRES_DB=supernova \
+    POSTGRES_USER=postgres \
+  --secure-environment-variables \
+    POSTGRES_PASSWORD=$DB_PASSWORD
 
-sleep 10
+echo ""
+echo "Habilitando credenciais administrativas do ACR..."
 
-# 2. Criar VNet e Subnet
-az network vnet create \
-  --resource-group $RG \
-  --name $VNET \
-  --address-prefix 10.10.0.0/16 \
-  --subnet-name $SUBNET \
-  --subnet-prefix 10.10.1.0/24 \
-  --tags owner=$GRUPO environment=dev cost-center=fiap
+az acr update \
+  --name $ACR_NAME \
+  --admin-enabled true
 
-sleep 15
+echo ""
+echo "Obtendo credenciais do ACR..."
 
-# 3. Criar NSG
-az network nsg create \
-  --resource-group $RG \
-  --name $NSG \
-  --tags owner=$GRUPO environment=dev cost-center=fiap
+ACR_USERNAME=$(az acr credential show \
+  --name $ACR_NAME \
+  --query username \
+  --output tsv)
 
-sleep 15
+ACR_PASSWORD=$(az acr credential show \
+  --name $ACR_NAME \
+  --query "passwords[0].value" \
+  --output tsv)
 
-# 4. Liberar SSH
-az network nsg rule create \
-  --resource-group $RG \
-  --nsg-name $NSG \
-  --name allow-ssh \
-  --protocol Tcp \
-  --priority 1000 \
-  --destination-port-range 22 \
-  --access Allow
+echo ""
+echo "Criando API no Azure Container Instances..."
 
-sleep 5
+az container create \
+  --resource-group $RESOURCE_GROUP \
+  --name $API_CONTAINER \
+  --image "$ACR_SERVER/$IMAGE_NAME:$IMAGE_TAG" \
+  --location $LOCATION \
+  --os-type Linux \
+  --cpu 1 \
+  --memory 1.5 \
+  --ports 8080 \
+  --ip-address Public \
+  --dns-name-label $API_DNS \
+  --registry-login-server $ACR_SERVER \
+  --registry-username $ACR_USERNAME \
+  --registry-password $ACR_PASSWORD \
+  --environment-variables \
+    DB_HOST="$DB_DNS.$LOCATION.azurecontainer.io" \
+    DB_PORT=5432 \
+    DB_NAME=supernova \
+    DB_USERNAME=postgres \
+  --secure-environment-variables \
+    DB_PASSWORD=$DB_PASSWORD
 
-# 5. Liberar HTTP
-az network nsg rule create \
-  --resource-group $RG \
-  --nsg-name $NSG \
-  --name allow-http \
-  --protocol Tcp \
-  --priority 1001 \
-  --destination-port-range 80 \
-  --access Allow
+echo ""
+echo "=========================================="
+echo "STATUS DOS CONTAINERS"
+echo "=========================================="
 
-sleep 5
+az container show \
+  --resource-group $RESOURCE_GROUP \
+  --name $DB_CONTAINER \
+  --query "{nome:name,status:instanceView.state,fqdn:ipAddress.fqdn}" \
+  --output table
 
-# 6. Liberar porta 8080
-az network nsg rule create \
-  --resource-group $RG \
-  --nsg-name $NSG \
-  --name allow-8080 \
-  --protocol Tcp \
-  --priority 1002 \
-  --destination-port-range 8080 \
-  --access Allow
+az container show \
+  --resource-group $RESOURCE_GROUP \
+  --name $API_CONTAINER \
+  --query "{nome:name,status:instanceView.state,fqdn:ipAddress.fqdn}" \
+  --output table
 
-sleep 10
+echo ""
+echo "Swagger:"
+echo "http://$API_DNS.$LOCATION.azurecontainer.io:8080/swagger-ui/index.html"
 
-# 7. Associar NSG à subnet
-az network vnet subnet update \
-  --resource-group $RG \
-  --vnet-name $VNET \
-  --name $SUBNET \
-  --network-security-group $NSG
-
-sleep 20
-
-# 8. Criar VM Ubuntu
-az vm create \
-  --resource-group $RG \
-  --name $VM \
-  --image Ubuntu2204 \
-  --admin-username $USER \
-  --admin-password $PASSWORD \
-  --authentication-type password \
-  --size Standard_E2s_v3 \
-  --vnet-name $VNET \
-  --subnet $SUBNET \
-  --nsg $NSG \
-  --public-ip-sku Standard \
-  --tags owner=$GRUPO environment=dev cost-center=fiap
-
-sleep 60
-
-# 9. Instalar Docker, Git e Nano
-az vm run-command invoke \
-  --resource-group $RG \
-  --name $VM \
-  --command-id RunShellScript \
-  --scripts '
-    export DEBIAN_FRONTEND=noninteractive
-
-    sudo apt-get update -y
-
-    sudo apt-get install -y \
-      ca-certificates \
-      curl \
-      git \
-      nano
-
-    sudo install -m 0755 -d /etc/apt/keyrings
-
-    sudo curl -fsSL \
-      https://download.docker.com/linux/ubuntu/gpg \
-      -o /etc/apt/keyrings/docker.asc
-
-    sudo chmod a+r /etc/apt/keyrings/docker.asc
-
-    sudo tee /etc/apt/sources.list.d/docker.sources > /dev/null <<EOF
-Types: deb
-URIs: https://download.docker.com/linux/ubuntu
-Suites: $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}")
-Components: stable
-Architectures: $(dpkg --print-architecture)
-Signed-By: /etc/apt/keyrings/docker.asc
-EOF
-
-    sudo apt-get update -y
-
-    sudo apt-get install -y \
-      docker-ce \
-      docker-ce-cli \
-      containerd.io \
-      docker-buildx-plugin \
-      docker-compose-plugin
-
-    sudo systemctl enable docker
-    sudo systemctl start docker
-
-    sudo usermod -aG docker azureuser
-  '
-
-sleep 20
-
-# 10. Executar container NGINX
-az vm run-command invoke \
-  --resource-group $RG \
-  --name $VM \
-  --command-id RunShellScript \
-  --scripts "
-    sudo docker rm -f nginx-8080 || true
-
-    sudo docker run -d \
-      --name nginx-8080 \
-      -p 8080:80 \
-      nginx
-
-    sudo docker ps
-  "
+echo ""
+echo "Infraestrutura criada com sucesso."
