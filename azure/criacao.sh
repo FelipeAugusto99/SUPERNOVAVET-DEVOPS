@@ -33,6 +33,14 @@ echo "Digite a senha do PostgreSQL:"
 read -s DB_PASSWORD
 
 echo ""
+echo "Digite a senha do usuario administrador da aplicacao:"
+read -s ADMIN_PASSWORD
+
+echo ""
+echo "Digite a senha do usuario veterinario da aplicacao:"
+read -s VET_PASSWORD
+
+echo ""
 echo ""
 
 
@@ -243,6 +251,8 @@ az container create \
     DB_USERNAME=postgres \
   --secure-environment-variables \
     DB_PASSWORD="$DB_PASSWORD" \
+    ADMIN_PASSWORD="$ADMIN_PASSWORD" \
+    VET_PASSWORD="$VET_PASSWORD" \
   --output table
 
 
@@ -317,3 +327,13 @@ echo "Para visualizar os logs da API:"
 echo "az container logs --resource-group $RESOURCE_GROUP --name $API_CONTAINER"
 
 echo ""
+
+
+# ============================================================
+# 15. LIMPEZA DAS VARIAVEIS SENSIVEIS
+# ============================================================
+
+unset DB_PASSWORD
+unset ADMIN_PASSWORD
+unset VET_PASSWORD
+unset ACR_PASSWORD
