@@ -955,6 +955,7 @@ Running
 
 # Segurança
 
+
 A solução utiliza algumas práticas para evitar exposição desnecessária de credenciais e permissões.
 
 A aplicação:
@@ -966,6 +967,7 @@ A aplicação:
 - Utiliza `--secure-environment-variables` para enviar a senha do PostgreSQL ao ACI.
 - Obtém as credenciais do ACR durante a execução do script.
 - Armazena a imagem da API no Azure Container Registry.
+- As senhas dos usuários iniciais da aplicação são recebidas por variáveis de ambiente seguras e não ficam escritas diretamente no código-fonte.
 
 ---
 
