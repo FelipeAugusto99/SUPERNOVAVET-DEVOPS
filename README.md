@@ -341,7 +341,13 @@ No Git Bash, execute:
 bash azure/criacao.sh
 ```
 
-Durante a execução, o script solicita a senha que será utilizada pelo PostgreSQL.
+Durante a execução, o script solicita:
+
+- a senha do PostgreSQL;
+- a senha do usuário administrador da aplicação;
+- a senha do usuário veterinário da aplicação.
+
+As senhas são informadas em tempo de execução e não ficam armazenadas diretamente no código-fonte.
 
 A senha é digitada em tempo de execução e não fica armazenada diretamente no script.
 
