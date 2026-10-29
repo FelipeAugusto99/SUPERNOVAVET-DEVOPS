@@ -2,6 +2,7 @@ package Novamonitor.config;
 
 import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
+import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.security.SecurityRequirement;
 import io.swagger.v3.oas.models.security.SecurityScheme;
 import org.springframework.context.annotation.Bean;
@@ -16,6 +17,12 @@ public class OpenApiConfig {
         String securitySchemeName = "basicAuth";
 
         return new OpenAPI()
+                .info(
+                        new Info()
+                                .title("SuperNova VET API")
+                                .version("v1")
+                                .description("API de gerenciamento de tutores e pets da clínica SuperNova VET")
+                )
                 .addSecurityItem(
                         new SecurityRequirement().addList(securitySchemeName)
                 )

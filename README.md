@@ -1,4 +1,4 @@
-# SuperNova VET - DevOps & Cloud Computing
+# SuperNova VET - DevOps & Cloud Computing (Sprint 4 - CI/CD)
 
 Projeto desenvolvido para a disciplina de **DevOps Tools & Cloud Computing**.
 
@@ -10,8 +10,8 @@ A aplicação foi desenvolvida em **Java com Spring Boot** e utiliza **PostgreSQ
 
 ## Integrantes
 
-- Felipe Augusto Lopes Ferreira
-- Kaique Mascarenhas dos Santos
+- RM563982 - Felipe Augusto Lopes Ferreira - 2TDSPG
+- RM565802 - Kaique Mascarenhas dos Santos - 2TDSPG
 
 ---
 
@@ -113,6 +113,93 @@ Azure Container Instances
 
 ---
 
+# Pipeline CI/CD - Azure DevOps
+
+Na Sprint 4 o deploy da API passou a ser feito automaticamente por uma pipeline YAML no **Azure DevOps**, definida no arquivo:
+
+```text
+azure-pipelines.yml
+```
+
+Projeto no Azure DevOps: **Sprint 4 – Azure DevOps** (organização `RM563982`).
+
+## Fluxo da pipeline
+
+```text
+1. Desenvolvedor faz commit/push na branch master (Azure Repos)
+2. Trigger dispara automaticamente a pipeline
+3. CI  - Maven compila o projeto e executa os testes automatizados (JUnit 5 + Mockito)
+4. CI  - Resultados dos testes publicados na aba "Tests"
+5. CI  - Artefato (app.jar + Dockerfile) publicado no Azure DevOps
+6. CD  - Inicia somente após o novo artefato ser gerado
+7. CD  - Build da imagem Docker e push para o Azure Container Registry (tag = Build ID)
+8. CD  - Deploy da nova imagem no Azure Container Instance da API
+9. Usuário final acessa a API atualizada, que persiste os dados no PostgreSQL (ACI)
+```
+
+## Etapas (stages, jobs e tasks)
+
+| Stage | Task | O que faz |
+|---|---|---|
+| CI | `mvnw.cmd clean package` | Compila o código e executa os testes |
+| CI | `PublishTestResults@2` | Publica os relatórios JUnit (`surefire-reports`) |
+| CI | `CopyFiles@2` + PowerShell | Monta o artefato com `app.jar` e `Dockerfile` |
+| CI | `PublishPipelineArtifact@1` | Publica o artefato `supernovavet-api` |
+| CD | `download` | Baixa o artefato gerado pelo CI |
+| CD | `AzureCLI@2` | `docker build` + `docker push` no ACR |
+| CD | `AzureCLI@2` | Recria o ACI da API com a nova imagem |
+
+## Testes automatizados
+
+Os testes ficam em `src/test/java` e são executados no CI:
+
+- `PetserviceTest` – regras de cadastro, atualização, busca e exclusão de pets
+- `PetControllerTest` – cadastro de pet com tutor, filtros por risco e resumo
+- `TutorControllerTest` – atualização, exclusão e bloqueio de exclusão com pets vinculados
+- `ValidacaoEntidadesTest` – validações de Pet e Tutor (risco, idade, e-mail, telefone)
+
+Para executar localmente:
+
+```bash
+./mvnw test
+```
+
+## Variáveis protegidas
+
+Os dados sensíveis ficam no **Variable Group** `supernovavet-secrets` (Pipelines → Library), marcados como **secret**:
+
+| Variável | Uso |
+|---|---|
+| `DB_PASSWORD` | Senha do PostgreSQL |
+| `ADMIN_PASSWORD` | Senha do usuário admin da aplicação |
+| `VET_PASSWORD` | Senha do usuário veterinário |
+
+As credenciais do ACR são obtidas em tempo de execução pela Azure CLI e o acesso à Azure é feito pela service connection `azure-supernovavet`. Nenhuma senha fica no código.
+
+## Agente
+
+A pipeline usa um agente **self-hosted** (pool `Default`) com Java 17, Docker Desktop e Azure CLI.
+
+## Como configurar do zero
+
+1. Criar a infraestrutura base (Resource Group, ACR e PostgreSQL no ACI):
+
+```bash
+bash azure/criacao.sh
+```
+
+2. No Azure DevOps, em **Project settings → Service connections**, criar uma conexão **Azure Resource Manager** com o nome `azure-supernovavet`, apontando para o Resource Group `rg-supernovavet-devops`.
+3. Em **Pipelines → Library**, criar o Variable Group `supernovavet-secrets` com `DB_PASSWORD`, `ADMIN_PASSWORD` e `VET_PASSWORD` (cadeado = secret).
+4. Em **Pipelines → New pipeline → Azure Repos Git**, selecionar o repositório e escolher **Existing Azure Pipelines YAML file** → `/azure-pipelines.yml`.
+5. Fazer qualquer alteração de código na branch `master` e realizar o push: a pipeline inicia automaticamente.
+6. Após o CD, acessar o Swagger:
+
+```text
+http://supernovavet-api-563982.brazilsouth.azurecontainer.io:8080/swagger-ui/index.html
+```
+
+---
+
 # Tecnologias utilizadas
 
 - Java 17
@@ -127,6 +214,8 @@ Azure Container Instances
 - Azure CLI
 - Azure Container Registry
 - Azure Container Instances
+- Azure DevOps (Repos e Pipelines)
+- JUnit 5 e Mockito
 - Swagger / OpenAPI
 - Git
 - GitHub

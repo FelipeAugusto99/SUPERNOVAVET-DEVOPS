@@ -1,0 +1,172 @@
+# ============================================================
+# SUPERNOVA VET - PIPELINE CI/CD (Azure DevOps)
+# CI: build + testes + publicacao do artefato
+# CD: build da imagem, push no ACR e deploy no ACI
+# ============================================================
+
+trigger:
+  branches:
+    include:
+      - master
+
+pr: none
+
+# Agente self-hosted (pool Default)
+pool:
+  name: Default
+
+variables:
+  # Variable Group com os dados sensiveis (marcados como secret):
+  # DB_PASSWORD, ADMIN_PASSWORD, VET_PASSWORD
+  - group: supernovavet-secrets
+
+  # Service connection do tipo Azure Resource Manager
+  - name: azureServiceConnection
+    value: azure-supernovavet
+
+  - name: resourceGroup
+    value: rg-supernovavet-devops
+  - name: location
+    value: brazilsouth
+  - name: acrName
+    value: acrsupernovavet563982
+  - name: imageName
+    value: supernovavet-api
+  - name: imageTag
+    value: $(Build.BuildId)
+  - name: apiContainer
+    value: aci-supernovavet-api
+  - name: apiDns
+    value: supernovavet-api-563982
+  - name: dbDns
+    value: supernovavet-db-563982
+
+stages:
+
+# ============================================================
+# CI - INTEGRACAO CONTINUA
+# ============================================================
+- stage: CI
+  displayName: CI - Build e Testes
+  jobs:
+  - job: BuildTest
+    displayName: Build, testes e artefato
+    steps:
+
+    - checkout: self
+
+    - script: call mvnw.cmd -B clean package
+      displayName: Maven - compilar e executar testes
+
+    - task: PublishTestResults@2
+      displayName: Publicar resultados dos testes
+      condition: succeededOrFailed()
+      inputs:
+        testResultsFormat: JUnit
+        testResultsFiles: '**/surefire-reports/TEST-*.xml'
+        testRunTitle: Testes SuperNova VET
+
+    - task: CopyFiles@2
+      displayName: Copiar Dockerfile para o artefato
+      inputs:
+        SourceFolder: deploy
+        Contents: Dockerfile
+        TargetFolder: $(Build.ArtifactStagingDirectory)
+
+    - powershell: Copy-Item "target\Novamonitor-0.0.1-SNAPSHOT.jar" "$(Build.ArtifactStagingDirectory)\app.jar"
+      displayName: Copiar .jar para o artefato
+
+    - task: PublishPipelineArtifact@1
+      displayName: Publicar artefato
+      inputs:
+        targetPath: $(Build.ArtifactStagingDirectory)
+        artifact: supernovavet-api
+
+# ============================================================
+# CD - ENTREGA CONTINUA
+# Executa somente depois que o CI gerar um novo artefato
+# ============================================================
+- stage: CD
+  displayName: CD - Deploy no ACI
+  dependsOn: CI
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/master'))
+  jobs:
+  - job: Deploy
+    displayName: Imagem no ACR e deploy no ACI
+    steps:
+
+    - checkout: none
+
+    - download: current
+      artifact: supernovavet-api
+      displayName: Baixar artefato do CI
+
+    - task: AzureCLI@2
+      displayName: Build e push da imagem no ACR
+      inputs:
+        azureSubscription: $(azureServiceConnection)
+        scriptType: ps
+        scriptLocation: inlineScript
+        inlineScript: |
+          $ErrorActionPreference = "Stop"
+          $image = "$(acrName).azurecr.io/$(imageName):$(imageTag)"
+
+          az acr login --name $(acrName)
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+          docker build -t $image "$(Pipeline.Workspace)\supernovavet-api"
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+          docker push $image
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+    - task: AzureCLI@2
+      displayName: Deploy da API no Azure Container Instance
+      env:
+        DB_PASSWORD: $(DB_PASSWORD)
+        ADMIN_PASSWORD: $(ADMIN_PASSWORD)
+        VET_PASSWORD: $(VET_PASSWORD)
+      inputs:
+        azureSubscription: $(azureServiceConnection)
+        scriptType: ps
+        scriptLocation: inlineScript
+        inlineScript: |
+          $ErrorActionPreference = "Stop"
+          $acrServer = "$(acrName).azurecr.io"
+
+          az acr update --name $(acrName) --admin-enabled true --output none
+          $acrUser = az acr credential show --name $(acrName) --query username --output tsv
+          $acrPass = az acr credential show --name $(acrName) --query "passwords[0].value" --output tsv
+
+          Write-Host "Removendo container anterior da API (se existir)..."
+          az container delete --resource-group $(resourceGroup) --name $(apiContainer) --yes --output none 2>$null
+
+          Write-Host "Criando container da API com a imagem $(imageName):$(imageTag)..."
+          az container create `
+            --resource-group $(resourceGroup) `
+            --name $(apiContainer) `
+            --image "$acrServer/$(imageName):$(imageTag)" `
+            --location $(location) `
+            --os-type Linux `
+            --cpu 1 `
+            --memory 1.5 `
+            --ports 8080 `
+            --ip-address Public `
+            --dns-name-label $(apiDns) `
+            --registry-login-server $acrServer `
+            --registry-username $acrUser `
+            --registry-password $acrPass `
+            --environment-variables `
+              DB_HOST="$(dbDns).$(location).azurecontainer.io" `
+              DB_PORT=5432 `
+              DB_NAME=supernova `
+              DB_USERNAME=postgres `
+            --secure-environment-variables `
+              DB_PASSWORD="$env:DB_PASSWORD" `
+              ADMIN_PASSWORD="$env:ADMIN_PASSWORD" `
+              VET_PASSWORD="$env:VET_PASSWORD" `
+            --output table
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+          Write-Host ""
+          Write-Host "Swagger: http://$(apiDns).$(location).azurecontainer.io:8080/swagger-ui/index.html"
