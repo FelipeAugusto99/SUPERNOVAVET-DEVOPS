@@ -115,6 +115,8 @@ Azure Container Instances
 
 # Pipeline CI/CD - Azure DevOps
 
+![Arquitetura e fluxo CI/CD](docs/arquitetura-cicd.png)
+
 Na Sprint 4 o deploy da API passou a ser feito automaticamente por uma pipeline YAML no **Azure DevOps**, definida no arquivo:
 
 ```text
