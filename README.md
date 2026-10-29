@@ -67,7 +67,7 @@ Todos os recursos Azure utilizados pela solução são criados através da Azure
 
 ## Diagrama da arquitetura
 
-![Arquitetura do SuperNova VET](docs/arquitetura-cicd.png.)
+![Arquitetura do SuperNova VET](docs/arquitetura-cicd.png)
 
 ## Fluxo da solução
 
@@ -345,7 +345,7 @@ SUPERNOVAVET-DEVOPS
 │   └── deletar.sh
 │
 ├── docs
-│   └── arquitetura-cicd.png.
+│   └── arquitetura-cicd.png
 │
 ├── src
 │   └── main
