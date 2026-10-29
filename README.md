@@ -67,7 +67,7 @@ Todos os recursos Azure utilizados pela solução são criados através da Azure
 
 ## Diagrama da arquitetura
 
-![Arquitetura do SuperNova VET](docs/arquitetura-supernovavet.png)
+![Arquitetura do SuperNova VET](docs/arquitetura-cicd.png.)
 
 ## Fluxo da solução
 
@@ -115,7 +115,6 @@ Azure Container Instances
 
 # Pipeline CI/CD - Azure DevOps
 
-![Arquitetura e fluxo CI/CD](docs/arquitetura-cicd.png)
 
 Na Sprint 4 o deploy da API passou a ser feito automaticamente por uma pipeline YAML no **Azure DevOps**, definida no arquivo:
 
@@ -346,7 +345,7 @@ SUPERNOVAVET-DEVOPS
 │   └── deletar.sh
 │
 ├── docs
-│   └── arquitetura-supernovavet.png
+│   └── arquitetura-cicd.png.
 │
 ├── src
 │   └── main
