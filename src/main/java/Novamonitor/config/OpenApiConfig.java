@@ -20,7 +20,7 @@ public class OpenApiConfig {
                 .info(
                         new Info()
                                 .title("SuperNova VET API")
-                                .version("v2")
+                                .version("v3")
                                 .description("API de gerenciamento de tutores e pets da clínica SuperNova VET")
                 )
                 .addSecurityItem(
